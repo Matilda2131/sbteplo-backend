@@ -86,9 +86,9 @@ async function callOpenRouter(messages) {
                 'X-Title': 'Sasha Heating'
             },
             body: JSON.stringify({
-                model: 'nvidia/nemotron-3-super-120b-a12b:free',
+                model: 'google/gemma-4-26b-a4b-it:free',
                 messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
-                max_tokens: 180,
+                max_tokens: 400,
                 temperature: 0.6
             })
         });
