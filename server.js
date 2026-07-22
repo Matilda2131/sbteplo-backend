@@ -86,7 +86,7 @@ async function callOpenRouter(messages) {
                 'X-Title': 'Sasha Heating'
             },
             body: JSON.stringify({
-                model: 'openai/gpt-oss-20b:free',
+                model: 'nvidia/nemotron-3-super-120b-a12b:free',
                 messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
                 max_tokens: 180,
                 temperature: 0.6
