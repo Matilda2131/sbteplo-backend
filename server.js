@@ -10,11 +10,11 @@ const DEEPSEEK_KEY = process.env.DEEPSEEK_KEY;
 const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
 const PORT = process.env.PORT || 3000;
 
-const SYSTEM_PROMPT = `РўС‹ вЂ” Р’Р°СЃРёР»РёР№, РёРЅР¶РµРЅРµСЂ РїРѕ РѕС‚РѕРїР»РµРЅРёСЋ РёР· РЎРџР±. РћР±С‰Р°РµС€СЊСЃСЏ РЅР° С‚С‹, РґСЂСѓР¶РµР»СЋР±РЅРѕ, 1-3 РїСЂРµРґР»РѕР¶РµРЅРёСЏ. Р’ РєРѕРЅС†Рµ Р·Р°РґР°Р№ РІРѕРїСЂРѕСЃ РїСЂРѕ РґРѕРј (РїР»РѕС‰Р°РґСЊ, СЌС‚Р°Р¶Рё, С‚РѕРїР»РёРІРѕ).
+const SYSTEM_PROMPT = `Ты — Василий, инженер по отоплению из СПб. Общаешься на ты, дружелюбно, 1-3 предложения. В конце задай вопрос про дом (площадь, этажи, топливо).
 
-Р¦РµРЅС‹: С‚С‘РїР»С‹Р№ РїРѕР» РѕС‚ 2500в‚Ѕ/РјВІ, СЂР°РґРёР°С‚РѕСЂС‹ РѕС‚ 10000в‚Ѕ/С€С‚, РєРѕС‚РµР»СЊРЅР°СЏ РѕС‚ 150000в‚Ѕ.
-Р“Р°СЂР°РЅС‚РёСЏ 5 Р»РµС‚. РњР°С‚РµСЂРёР°Р»С‹: Rehau, Baxi, Viessmann.
-Р•СЃР»Рё РЅРµ Р·РЅР°РµС€СЊ вЂ” СЃРєР°Р¶Рё "РїРѕР·РІРѕРЅРё РЎР°С€Рµ: +7(911)924-54-25".`;
+Цены: тёплый пол от 2500₽/м², радиаторы от 10000₽/шт, котельная от 150000₽.
+Гарантия 5 лет. Материалы: Rehau, Baxi, Viessmann.
+Если не знаешь — скажи "позвони Саше: +7(911)924-54-25".`;
 
 async function callDeepSeek(messages) {
     if (!DEEPSEEK_KEY) return null;
@@ -74,7 +74,7 @@ app.post('/api/chat', async (req, res) => {
 
         let reply = await callDeepSeek(messages);
         if (!reply) reply = await callOpenRouter(messages);
-        if (!reply) return res.json({ choices: [{ message: { content: 'РџРѕРїСЂРѕР±СѓР№ РїРѕР·РІРѕРЅРёС‚СЊ: +7(911)924-54-25 рџ”Ґ' } }] });
+        if (!reply) return res.json({ choices: [{ message: { content: 'Попробуй позвонить: +7(911)924-54-25' } }] });
 
         res.json({ choices: [{ message: { content: reply } }] });
     } catch (error) {
@@ -93,7 +93,7 @@ app.post('/api/lead', express.urlencoded({ extended: true }), async (req, res) =
             await fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: TG_CHAT, text: 'рџ“© ' + (name||'') + ' ' + (phone||'') + '\n' + (comment||'') })
+                body: JSON.stringify({ chat_id: TG_CHAT, text: 'Новая заявка: ' + (name||'') + ' ' + (phone||'') + '\n' + (comment||'') })
             });
         } catch (e) {}
     }
