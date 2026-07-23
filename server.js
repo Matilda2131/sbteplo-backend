@@ -52,7 +52,7 @@ async function callOpenRouter(messages) {
                 'X-Title': 'Sasha Heating'
             },
             body: JSON.stringify({
-                model: 'google/gemma-4-31b-it:free',
+                model: 'openai/gpt-oss-20b:free',
                 messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
                 max_tokens: 400,
                 temperature: 0.6
