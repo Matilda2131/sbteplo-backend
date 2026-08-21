@@ -75,8 +75,8 @@ app.post('/api/chat', async (req, res) => {
         const { messages } = req.body;
         if (!messages || !messages.length) return res.status(400).json({ error: 'No messages' });
 
-        let reply = await callOpenRouter(messages);
-        if (!reply) reply = await callDeepSeek(messages);
+        let reply = await callDeepSeek(messages);
+        if (!reply) reply = await callOpenRouter(messages);
         if (!reply) return res.json({ choices: [{ message: { content: 'Попробуй позвонить: +7(911)924-54-25' } }] });
 
         res.json({ choices: [{ message: { content: reply } }] });
