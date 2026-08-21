@@ -102,6 +102,6 @@ app.post('/api/lead', express.urlencoded({ extended: true }), async (req, res) =
     res.json({ ok: true });
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', deployMarker: 'test-marker-v9k2' }));
 
 app.listen(PORT, () => console.log('Server on port ' + PORT));
