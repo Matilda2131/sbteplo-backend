@@ -56,8 +56,9 @@ async function callOpenRouter(messages) {
             body: JSON.stringify({
                 model: 'stealth/ox-alpha',
                 messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
-                max_tokens: 400,
-                temperature: 0.6
+                max_tokens: 1200,
+                temperature: 0.6,
+                reasoning: { enabled: false }
             })
         });
         if (response.ok) {
