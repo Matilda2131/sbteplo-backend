@@ -37,6 +37,9 @@ async function callDeepSeek(messages) {
         if (response.ok) {
             const data = await response.json();
             if (data.choices && data.choices[0]) return data.choices[0].message.content;
+        } else {
+            const body = await response.text();
+            console.error('DeepSeek HTTP', response.status, body.slice(0, 300));
         }
     } catch (e) { console.error('DeepSeek error:', e.message); }
     return null;
@@ -63,6 +66,9 @@ async function callOpenRouter(messages) {
         if (response.ok) {
             const data = await response.json();
             if (data.choices && data.choices[0]) return data.choices[0].message.content;
+        } else {
+            const body = await response.text();
+            console.error('OpenRouter HTTP', response.status, body.slice(0, 300));
         }
     } catch (e) { console.error('OpenRouter error:', e.message); }
     return null;
