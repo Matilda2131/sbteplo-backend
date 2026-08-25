@@ -45,8 +45,14 @@ async function callDeepSeek(messages) {
     return null;
 }
 
-async function callOpenRouter(messages) {
-    if (!OPENROUTER_KEY) return null;
+const OPENROUTER_MODELS = [
+    'z-ai/glm-5.2:free',
+    'minimax/minimax-m3:free',
+    'nvidia/nemotron-3-super-120b-a12b:free',
+    'google/gemma-4-31b-it:free'
+];
+
+async function callOpenRouterModel(model, messages) {
     try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
@@ -57,7 +63,7 @@ async function callOpenRouter(messages) {
                 'X-Title': 'Sasha Heating'
             },
             body: JSON.stringify({
-                model: 'z-ai/glm-5.2:free',
+                model,
                 messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
                 max_tokens: 500,
                 temperature: 0.6
@@ -68,9 +74,18 @@ async function callOpenRouter(messages) {
             if (data.choices && data.choices[0]) return data.choices[0].message.content;
         } else {
             const body = await response.text();
-            console.error('OpenRouter HTTP', response.status, body.slice(0, 300));
+            console.error('OpenRouter HTTP', model, response.status, body.slice(0, 300));
         }
-    } catch (e) { console.error('OpenRouter error:', e.message); }
+    } catch (e) { console.error('OpenRouter error:', model, e.message); }
+    return null;
+}
+
+async function callOpenRouter(messages) {
+    if (!OPENROUTER_KEY) return null;
+    for (const model of OPENROUTER_MODELS) {
+        const reply = await callOpenRouterModel(model, messages);
+        if (reply) return reply;
+    }
     return null;
 }
 
