@@ -54,7 +54,7 @@ async function callOpenRouter(messages) {
                 'X-Title': 'Sasha Heating'
             },
             body: JSON.stringify({
-                model: 'google/gemma-4-31b-it:free',
+                model: 'stealth/ox-alpha',
                 messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
                 max_tokens: 500,
                 temperature: 0.6
