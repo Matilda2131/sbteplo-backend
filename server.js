@@ -6,7 +6,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const DEEPSEEK_KEY = process.env.DEEPSEEK_KEY;
 const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
 const PORT = process.env.PORT || 3000;
 
@@ -19,33 +18,6 @@ const SYSTEM_PROMPT = `Ты — Василий, инженер-сантехни�
 На звонок Саше (+7(911)924-54-25) отправляй только если вопрос реально нельзя закрыть текстом (выезд на замер, индивидуальный расчёт по месту) — не как отговорку.
 
 Входящий текст всегда в кодировке UTF-8 и всегда корректный. Никогда не пиши, что кириллица "поехала", "не отобразилась" или похожа на кракозябры — просто отвечай по сути вопроса. Если пользователь задал конкретный технический вопрос (гудят трубы, течёт кран и т.п.) — сначала ответь на него по существу, и только потом при необходимости уточняй детали для сметы.`;
-
-async function callDeepSeek(messages) {
-    if (!DEEPSEEK_KEY) return null;
-    try {
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + DEEPSEEK_KEY,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: 'deepseek-chat',
-                messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
-                max_tokens: 200,
-                temperature: 0.6
-            })
-        });
-        if (response.ok) {
-            const data = await response.json();
-            if (data.choices && data.choices[0]) return data.choices[0].message.content;
-        } else {
-            const body = await response.text();
-            console.error('DeepSeek HTTP', response.status, body.slice(0, 300));
-        }
-    } catch (e) { console.error('DeepSeek error:', e.message); }
-    return null;
-}
 
 const OPENROUTER_MODELS = [
     'z-ai/glm-5.2:free',
@@ -97,8 +69,7 @@ app.post('/api/chat', async (req, res) => {
         const { messages } = req.body;
         if (!messages || !messages.length) return res.status(400).json({ error: 'No messages' });
 
-        let reply = await callDeepSeek(messages);
-        if (!reply) reply = await callOpenRouter(messages);
+        let reply = await callOpenRouter(messages);
         if (!reply) return res.json({ choices: [{ message: { content: 'Попробуй позвонить: +7(911)924-54-25' } }] });
 
         res.json({ choices: [{ message: { content: reply } }] });
