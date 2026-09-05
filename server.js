@@ -20,6 +20,16 @@ const SYSTEM_PROMPT = `Ты — Василий, инженер-сантехни�
 
 Входящий текст всегда в кодировке UTF-8 и всегда корректный. Никогда не пиши, что кириллица "поехала", "не отобразилась" или похожа на кракозябры — просто отвечай по сути вопроса. Если пользователь задал конкретный технический вопрос (гудят трубы, течёт кран и т.п.) — сначала ответь на него по существу, и только потом при необходимости уточняй детали для сметы.`;
 
+async function fetchWithTimeout(url, options, timeoutMs) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
 const OPENROUTER_MODELS = [
     'z-ai/glm-5.2:free',
     'minimax/minimax-m3:free',
@@ -29,7 +39,7 @@ const OPENROUTER_MODELS = [
 
 async function callOpenRouterModel(model, messages) {
     try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + OPENROUTER_KEY,
@@ -43,7 +53,7 @@ async function callOpenRouterModel(model, messages) {
                 max_tokens: 500,
                 temperature: 0.6
             })
-        });
+        }, 8000);
         if (response.ok) {
             const data = await response.json();
             if (data.choices && data.choices[0]) return data.choices[0].message.content;
@@ -67,7 +77,7 @@ async function callOpenRouter(messages) {
 async function callExperiential(messages) {
     if (!EXPERIENTIAL_KEY) return null;
     try {
-        const response = await fetch('https://api.experientiallabs.ai/v1/chat/completions', {
+        const response = await fetchWithTimeout('https://api.experientiallabs.ai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + EXPERIENTIAL_KEY,
@@ -79,7 +89,7 @@ async function callExperiential(messages) {
                 max_tokens: 500,
                 temperature: 0.6
             })
-        });
+        }, 8000);
         if (response.ok) {
             const data = await response.json();
             if (data.choices && data.choices[0]) return data.choices[0].message.content;
