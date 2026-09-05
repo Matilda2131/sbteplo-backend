@@ -6,6 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const EXPERIENTIAL_KEY = process.env.EXPERIENTIAL_KEY;
 const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
 const PORT = process.env.PORT || 3000;
 
@@ -63,13 +64,41 @@ async function callOpenRouter(messages) {
     return null;
 }
 
+async function callExperiential(messages) {
+    if (!EXPERIENTIAL_KEY) return null;
+    try {
+        const response = await fetch('https://api.experientiallabs.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + EXPERIENTIAL_KEY,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'gpt-5.6-luna',
+                messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
+                max_tokens: 500,
+                temperature: 0.6
+            })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            if (data.choices && data.choices[0]) return data.choices[0].message.content;
+        } else {
+            const body = await response.text();
+            console.error('Experiential HTTP', response.status, body.slice(0, 300));
+        }
+    } catch (e) { console.error('Experiential error:', e.message); }
+    return null;
+}
+
 // Chat proxy
 app.post('/api/chat', async (req, res) => {
     try {
         const { messages } = req.body;
         if (!messages || !messages.length) return res.status(400).json({ error: 'No messages' });
 
-        let reply = await callOpenRouter(messages);
+        let reply = await callExperiential(messages);
+        if (!reply) reply = await callOpenRouter(messages);
         if (!reply) return res.json({ choices: [{ message: { content: 'Попробуй позвонить: +7(911)924-54-25' } }] });
 
         res.json({ choices: [{ message: { content: reply } }] });
