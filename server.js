@@ -118,6 +118,33 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
+// Calculator completion notification
+app.post('/api/calc', async (req, res) => {
+    const { area, total, floor, radiator, boiler, water, sewage } = req.body || {};
+    const CALC_TOKEN = process.env.CALC_BOT_TOKEN;
+    const TG_CHAT = process.env.TG_CHAT_ID || '425052747';
+    if (CALC_TOKEN) {
+        const lines = [
+            '📊 Новый расчёт на сайте',
+            `Площадь: ${area || 0} м²`,
+            `Итого: ${(total || 0).toLocaleString('ru-RU')} ₽`,
+        ];
+        if (floor) lines.push(`Тёплый пол: ${floor.toLocaleString('ru-RU')} ₽`);
+        if (radiator) lines.push(`Радиаторы: ${radiator.toLocaleString('ru-RU')} ₽`);
+        if (boiler) lines.push(`Котельная: ${boiler.toLocaleString('ru-RU')} ₽`);
+        if (water) lines.push(`Водоснабжение: ${water.toLocaleString('ru-RU')} ₽`);
+        if (sewage) lines.push(`Канализация: ${sewage.toLocaleString('ru-RU')} ₽`);
+        try {
+            await fetch('https://api.telegram.org/bot' + CALC_TOKEN + '/sendMessage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: TG_CHAT, text: lines.join('\n') })
+            });
+        } catch (e) { console.error('Calc notify error:', e.message); }
+    }
+    res.json({ ok: true });
+});
+
 // Lead form
 app.post('/api/lead', express.urlencoded({ extended: true }), async (req, res) => {
     const { name, phone, comment, form } = req.body;
