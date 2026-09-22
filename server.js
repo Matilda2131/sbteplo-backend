@@ -3,8 +3,34 @@ const cors = require('cors');
 const fetch = require('node-fetch');
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
+
+// Простой in-memory rate limit: защита API-ключей от мусорного трафика
+const rateBuckets = new Map();
+function rateLimit(max, windowMs) {
+    return (req, res, next) => {
+        const key = req.ip + '|' + req.path;
+        const now = Date.now();
+        let hits = (rateBuckets.get(key) || []).filter(t => now - t < windowMs);
+        if (hits.length >= max) {
+            res.set('Retry-After', String(Math.ceil((windowMs - (now - hits[0])) / 1000)));
+            return res.status(429).json({ error: 'Слишком много запросов, подожди минутку' });
+        }
+        hits.push(now);
+        rateBuckets.set(key, hits);
+        next();
+    };
+}
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, hits] of rateBuckets) {
+        const fresh = hits.filter(t => now - t < 60000);
+        if (fresh.length) rateBuckets.set(key, fresh);
+        else rateBuckets.delete(key);
+    }
+}, 60000).unref();
 
 const EXPERIENTIAL_KEY = process.env.EXPERIENTIAL_KEY;
 const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
@@ -15,7 +41,7 @@ const SYSTEM_PROMPT = `Ты — Василий, инженер-сантехни�
 Твоя задача — реально решить вопрос клиента здесь и сейчас: посчитать, объяснить, подсказать, а не отфутболивать на звонок. Ты реально разбираешься в отоплении и водоснабжении — не только называешь бренды, а объясняешь, почему та или иная система подходит под конкретный дом (площадь, этажность, топливо, назначение). Разбираешься также в канализации и сантехнике в целом. Если вопрос требует уточнений — задай встречный вопрос по делу.
 
 Цены: тёплый пол от 2500₽/м², радиаторы от 10000₽/шт, котельная от 150000₽.
-Гарантия 5 лет. Когда советуешь котёл — в первую очередь предлагай Baxi и De Dietrich (наш основной выбор по надёжности и сервису), Rehau — для труб и тёплого пола, Viessmann — как более премиальный вариант, если клиент прямо спрашивает про топовый сегмент.
+Гарантия 5 лет. Когда советуешь котёл — в первую очередь предлагай Baxi и De Dietrich (наш основной выбор по надёжности и сервису), также есть Buderus (немецкая надёжность среднего сегмента) и TECH; Viessmann — как более премиальный вариант, если клиент прямо спрашивает про топовый сегмент. Для труб и тёплого пола — Rehau и Uponor (PEX-a, гарантия 50 лет), насосы — Grundfos.
 На звонок Саше (+7(911)924-54-25) отправляй только если вопрос реально нельзя закрыть текстом (выезд на замер, индивидуальный расчёт по месту) — не как отговорку.
 
 Входящий текст всегда в кодировке UTF-8 и всегда корректный. Никогда не пиши, что кириллица "поехала", "не отобразилась" или похожа на кракозябры — просто отвечай по сути вопроса. Если пользователь задал конкретный технический вопрос (гудят трубы, течёт кран и т.п.) — сначала ответь на него по существу, и только потом при необходимости уточняй детали для сметы.
@@ -110,13 +136,19 @@ async function callExperiential(messages) {
 }
 
 // Chat proxy
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', rateLimit(15, 60000), async (req, res) => {
     try {
         const { messages } = req.body;
-        if (!messages || !messages.length) return res.status(400).json({ error: 'No messages' });
+        if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'No messages' });
 
-        let reply = await callExperiential(messages);
-        if (!reply) reply = await callOpenRouter(messages);
+        const clean = messages
+            .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+            .slice(-12)
+            .map(m => ({ role: m.role, content: m.content.slice(0, 4000) }));
+        if (!clean.length) return res.status(400).json({ error: 'No messages' });
+
+        let reply = await callExperiential(clean);
+        if (!reply) reply = await callOpenRouter(clean);
         if (!reply) return res.json({ choices: [{ message: { content: 'Попробуй позвонить: +7(911)924-54-25' } }] });
 
         res.json({ choices: [{ message: { content: reply } }] });
@@ -127,10 +159,11 @@ app.post('/api/chat', async (req, res) => {
 });
 
 // Calculator completion notification
-app.post('/api/calc', async (req, res) => {
+app.post('/api/calc', rateLimit(15, 60000), async (req, res) => {
     const { area, total, floor, radiator, boiler, water, sewage } = req.body || {};
     const CALC_TOKEN = process.env.CALC_BOT_TOKEN;
     const TG_CHAT = process.env.TG_CHAT_ID || '425052747';
+    res.json({ ok: true });
     if (CALC_TOKEN) {
         const lines = [
             '📊 Новый расчёт на сайте',
@@ -143,33 +176,33 @@ app.post('/api/calc', async (req, res) => {
         if (water) lines.push(`Водоснабжение: ${water.toLocaleString('ru-RU')} ₽`);
         if (sewage) lines.push(`Канализация: ${sewage.toLocaleString('ru-RU')} ₽`);
         try {
-            await fetch('https://api.telegram.org/bot' + CALC_TOKEN + '/sendMessage', {
+            await fetchWithTimeout('https://api.telegram.org/bot' + CALC_TOKEN + '/sendMessage', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ chat_id: TG_CHAT, text: lines.join('\n') })
-            });
+            }, 6000);
         } catch (e) { console.error('Calc notify error:', e.message); }
     }
-    res.json({ ok: true });
 });
 
 // Lead form
-app.post('/api/lead', express.urlencoded({ extended: true }), async (req, res) => {
+app.post('/api/lead', express.urlencoded({ extended: true }), rateLimit(5, 60000), async (req, res) => {
     const { name, phone, comment, form } = req.body;
     const TG_TOKEN = process.env.TG_BOT_TOKEN;
     const TG_CHAT = process.env.TG_CHAT_ID || '425052747';
+    res.json({ ok: true });
     if (TG_TOKEN) {
+        const text = 'Новая заявка' + (form ? ' (' + form + ')' : '') + ': ' + (name || '') + ' ' + (phone || '') + '\n' + (comment || '');
         try {
-            await fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {
+            await fetchWithTimeout('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: TG_CHAT, text: 'Новая заявка: ' + (name||'') + ' ' + (phone||'') + '\n' + (comment||'') })
-            });
-        } catch (e) {}
+                body: JSON.stringify({ chat_id: TG_CHAT, text: text })
+            }, 6000);
+        } catch (e) { console.error('Lead notify error:', e.message); }
     }
-    res.json({ ok: true });
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', deployMarker: 'test-marker-v9k2' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 app.listen(PORT, () => console.log('Server on port ' + PORT));
