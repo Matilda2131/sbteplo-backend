@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 
@@ -108,6 +108,32 @@ async function fetchWithTimeout(url, options, timeoutMs) {
     }
 }
 
+// Подчистка: модель иногда впихивает английские слова в русский ответ.
+// Заменяем известные утечки на русские аналоги (бренды и сокращения не трогаем).
+const RU_FIXES = [
+    [/\broughly\b/gi, 'примерно'],
+    [/\bbasically\b/gi, 'по сути'],
+    [/\bactually\b/gi, 'на самом деле'],
+    [/\bhowever\b/gi, 'однако'],
+    [/\banyway(s)?\b/gi, 'в общем'],
+    [/\bwell\b/gi, 'короче'],
+    [/\bgaz\b/gi, 'газ'],
+    [/\bsure\b/gi, 'конечно'],
+    [/\bright\b/gi, 'ладно'],
+    [/\bno worries\b/gi, 'без проблем'],
+    [/\bkeep in mind\b/gi, 'имей в виду'],
+    [/\bfor example\b/gi, 'например'],
+    [/\btherefore\b/gi, 'поэтому'],
+    [/\bprobably\b/gi, 'наверное'],
+    [/\bmaybe\b/gi, 'возможно'],
+    [/\bof course\b/gi, 'конечно']
+];
+function sanitizeRussian(text) {
+    let out = String(text || '');
+    for (const [re, rep] of RU_FIXES) out = out.replace(re, rep);
+    return out;
+}
+
 const OPENROUTER_MODELS = [
     'z-ai/glm-5.2:free',
     'minimax/minimax-m3:free',
@@ -131,7 +157,7 @@ async function callOpenRouterModel(model, messages) {
                 max_tokens: 700,
                 temperature: 0.6
             })
-        }, 8000);
+        }, 20000);
         if (response.ok) {
             const data = await response.json();
             if (data.choices && data.choices[0]) return data.choices[0].message.content;
@@ -167,7 +193,7 @@ async function callExperiential(messages) {
                 max_tokens: 700,
                 temperature: 0.6
             })
-        }, 8000);
+        }, 20000);
         if (response.ok) {
             const data = await response.json();
             if (data.choices && data.choices[0]) return data.choices[0].message.content;
@@ -195,7 +221,7 @@ app.post('/api/chat', rateLimit(15, 60000), async (req, res) => {
         if (!reply) reply = await callOpenRouter(clean);
         if (!reply) return res.json({ choices: [{ message: { content: 'Попробуй позвонить: +7(911)924-54-25' } }] });
 
-        res.json({ choices: [{ message: { content: reply } }] });
+        res.json({ choices: [{ message: { content: sanitizeRussian(reply) } }] });
     } catch (error) {
         console.error('Chat error:', error);
         res.status(500).json({ error: 'Server error' });
