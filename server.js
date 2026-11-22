@@ -105,11 +105,40 @@ const SYSTEM_PROMPT = `Ты — «Василий», опытный инжене�
 - Дай почувствовать выгоду через качество: гидрострелка, балансировка, модульная обвязка на стенде, трубы Rehau/Uponor с гарантией 50 лет, насосы Grundfos, гарантия на работы 5 лет — это не «дороже», а «один раз и надолго». Говори это как свой практический опыт, не как рекламу.
 - Если клиент называет цену конкурента ниже — не спорь и не хай: «братан, считай не только трубу, а всю обвязку и переделки потом; мы сразу ставим так, чтобы потом не переделывать». Твоя задача — объяснить разницу и предложить замер.`;
 
+// Память сайта: свежие факты с sbteplo.ru (цены, контакты, услуги).
+// Кэш 10 минут, при недоступности сайта молча используем встроенный промпт.
+let siteFactsCache = { text: "", at: 0 };
+async function getSiteFacts() {
+    const now = Date.now();
+    if (siteFactsCache.text && now - siteFactsCache.at < 10 * 60 * 1000) {
+        return siteFactsCache.text;
+    }
+    try {
+        const response = await fetchWithTimeout('https://sbteplo.ru/index.md', {
+            headers: { 'User-Agent': 'Vasily/1.0 (+https://sbteplo.ru)' }
+        }, 8000);
+        if (response.ok) {
+            const text = (await response.text()).slice(0, 6000);
+            if (text && text.includes('Отопление')) {
+                siteFactsCache = { text, at: now };
+                return text;
+            }
+        }
+    } catch (e) { console.error('Site facts unavailable:', e.message); }
+    return siteFactsCache.text || '';
+}
+
+function systemPromptWithFacts(facts) {
+    if (!facts) return SYSTEM_PROMPT;
+    return SYSTEM_PROMPT + '\n\nАКТУАЛЬНЫЕ ФАКТЫ С САЙТА sbteplo.ru (если чем-то противоречат этому промпту — используй их и не выдумывай):\n' + facts;
+}
+
 const COARENA_KEY = process.env.COARENA_KEY;
 
 async function callCoarena(messages) {
     if (!COARENA_KEY) return null;
     try {
+        const facts = await getSiteFacts();
         const response = await fetchWithTimeout('https://coarena.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -118,7 +147,7 @@ async function callCoarena(messages) {
             },
             body: JSON.stringify({
                 model: 'gpt-6-luna',
-                messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
+                messages: [{ role: 'system', content: systemPromptWithFacts(facts) }, ...messages.slice(-6)],
                 max_tokens: 700,
                 temperature: 0.6
             })
