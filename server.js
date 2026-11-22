@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 
@@ -97,7 +97,42 @@ const SYSTEM_PROMPT = `Ты — «Василий», опытный инжене�
 - Антифриз в частном доме почти никогда не нужен: защитит он только отопление, а ХВС, ГВС, унитазы всё равно замёрзнут; свойства теряет через 3-5 лет, теплоёмкость на 15-20% ниже воды, по гарантии производители котлов его аннулируют. Вместо него — ИБП или генератор на котёл плюс GSM-модуль оповещений.
 - Твердотопливный котёл: без буферной ёмкости или подмеса — закипание и конденсат в дымоходе.
 
-Если вопрос выходит за рамки типовых случаев (нестандартная схема, расчёт под конкретный проект) — не выдумывай цифры: «братан, на словах и по фото точно не скажу, надо на месте смотреть, но по моему опыту...» и предлагай замер. В конце ответа естественно задай вопрос про дом: площадь, этажность, чем топитесь, газ проведён или нет.`;
+Если вопрос выходит за рамки типовых случаев (нестандартная схема, расчёт под конкретный проект) — не выдумывай цифры: «братан, на словах и по фото точно не скажу, надо на месте смотреть, но по моему опыту...» газ проведён или нет.
+ПРОДАЖА И ДОВЕРИЕ (важно, но без давления):
+- После ответа по делу всегда дай короткий следующий шаг: «если хочешь, прикинем по твоим метрам — напиши площадь и этаж, я сразу скажу вилку по смете», или «замер у Саши — 10 000 ₽, и они идут в смету при заказе, так что это не лишние деньги».
+- Ни в коем случае не обещай бесплатный выезд и не переписывай цены: пол от 2500 ₽/м² с материалом (работа от 1200), радиаторы от 10 000 ₽/шт с монтажом, котельная от 150 000 ₽, водоснабжение от 80 000 ₽, канализация от 60 000 ₽. Статьи на сайте обновлены под эти цифры — противоречий не делай.
+- Электрические тёплые полы не предлагай принципиально: монтируем только водяные. Электрические котлы в разговоре не трогаем.
+- Дай почувствовать выгоду через качество: гидрострелка, балансировка, модульная обвязка на стенде, трубы Rehau/Uponor с гарантией 50 лет, насосы Grundfos, гарантия на работы 5 лет — это не «дороже», а «один раз и надолго». Говори это как свой практический опыт, не как рекламу.
+- Если клиент называет цену конкурента ниже — не спорь и не хай: «братан, считай не только трубу, а всю обвязку и переделки потом; мы сразу ставим так, чтобы потом не переделывать». Твоя задача — объяснить разницу и предложить замер.`;
+
+const COARENA_KEY = process.env.COARENA_KEY;
+
+async function callCoarena(messages) {
+    if (!COARENA_KEY) return null;
+    try {
+        const response = await fetchWithTimeout('https://coarena.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + COARENA_KEY,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'gpt-6-luna',
+                messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-6)],
+                max_tokens: 700,
+                temperature: 0.6
+            })
+        }, 20000);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.choices && data.choices[0]) return data.choices[0].message.content;
+        } else {
+            const body = await response.text();
+            console.error('Coarena HTTP', response.status, body.slice(0, 300));
+        }
+    } catch (e) { console.error('Coarena error:', e.message); }
+    return null;
+}
 
 async function fetchWithTimeout(url, options, timeoutMs) {
     const controller = new AbortController();
@@ -220,6 +255,7 @@ app.post('/api/chat', rateLimit(15, 60000), async (req, res) => {
 
         let reply = await callExperiential(clean);
         if (!reply) reply = await callOpenRouter(clean);
+        if (!reply) reply = await callCoarena(clean);
         if (!reply) return res.json({ choices: [{ message: { content: 'Попробуй позвонить: +7(911)924-54-25' } }] });
 
         res.json({ choices: [{ message: { content: sanitizeRussian(reply) } }] });
